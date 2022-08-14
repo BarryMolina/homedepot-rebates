@@ -1,20 +1,5 @@
+
 const puppeteer = require('puppeteer');
-const functions = require('@google-cloud/functions-framework');
-const { me } = require('./me.js')
-
-functions.http('main', async (req, res) => {
-	const browser = await puppeteer.launch();
-
-	const { date, receiptNum, total } = req.body
-
-	try {
-		await rebateApply(browser, me, receiptNum, total, date)
-		res.send({ "success": true })
-	} catch (error) {
-		console.log(error)
-		res.json({ "success": false, "error": error.message })
-	}
-})
 
 const rebateApply = async (browser, me, receiptNum, receiptTotal, purchaseDate, physicalGiftCard = true) => {
 
@@ -123,13 +108,4 @@ function validateInput(me, receiptNum, receiptTotal, purchaseDate) {
 	}
 }
 
-async function testRebateApply() {
-	const browser = await puppeteer.launch({
-		headless: false,
-		// sloMo: 250
-	});
-
-	rebateApply(browser, me, '49410005277629', '7.35', '07/22/22')
-}
-
-// testRebateApply()
+exports.rebateApply = rebateApply;
