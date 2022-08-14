@@ -65,9 +65,18 @@ const rebateApply = async (browser, me, receiptNum, receiptTotal, purchaseDate, 
 
 		// Submit application
 		applyState = 'Submitting application'
-		// await page.click('#continueOrSubmitBtn')
-		// await page.waitForNetworkIdle();
+		await page.click('#continueOrSubmitBtn')
+		await page.waitForNetworkIdle();
+
+		// // Get tracking number
+		applyState = 'Getting tracking number'
+		const trackingSelector = await page.$('#confirmation-trackingNumber')
+		const trackingNumber = await (await trackingSelector.getProperty('textContent')).jsonValue()
+		// console.log(`Tracking number: ${trackingNumber}`)
 		await browser.close();
+
+		return trackingNumber
+
 	} catch (error) {
 		const errorPage = page.url()
 		error.message = `${error.message} - ${applyState} - ${errorPage}`
