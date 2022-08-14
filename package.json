@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "functions-framework --target=main",
+    "deploy": "gcloud functions deploy homedepot-rebate --region=us-central1 --runtime=nodejs16 --source=./index.js --entry-point=main --trigger-http"
   },
   "keywords": [],
   "author": "",
