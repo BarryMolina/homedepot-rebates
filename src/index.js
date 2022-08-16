@@ -10,10 +10,13 @@ functions.http('main', async (req, res) => {
 	const { date, receiptNum, total } = req.body
 
 	try {
-		await rebateApply(browser, me, receiptNum, total, date)
-		res.send({ "success": true })
+		const trackingNumber = await rebateApply(browser, me, receiptNum, total, date)
+		if (trackingNumber) {
+			return res.send({ "trackingNumber": trackingNumber })
+		}
+		return res.send({ "error": "No tracking number was returned" })
 	} catch (error) {
 		console.log(error)
-		res.json({ "success": false, "error": error.message })
+		res.send({ "error": error.message })
 	}
 })

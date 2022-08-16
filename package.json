@@ -2,11 +2,11 @@
   "name": "homedepot_receipts",
   "version": "1.0.0",
   "description": "",
-  "main": "./src/index.js",
+  "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "functions-framework --target=main",
-    "deploy": "gcloud functions deploy homedepot-rebate --region=us-central1 --runtime=nodejs16 --source=./src/index.js --entry-point=main --trigger-http"
+    "deploy": "gcloud functions deploy homedepot-rebate --gen2 --region=us-central1 --runtime=nodejs16 --source=./ --entry-point=main --trigger-http --memory=512MB"
   },
   "keywords": [],
   "author": "",
