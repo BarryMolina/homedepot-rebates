@@ -1,0 +1,22 @@
+{
+  "name": "apps_script",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "rimraf build",
+    "copy-files": "npx copyfiles appsscript.json build/",
+    "build": "npm run clean && tsc && npm run copy-files",
+    "deploy": "npm run build && clasp push"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "gas-types-detailed": "^1.1.0",
+    "rimraf": "^3.0.2",
+    "typescript": "^4.7.4"
+  }
+}
