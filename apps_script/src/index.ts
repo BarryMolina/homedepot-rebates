@@ -1,8 +1,11 @@
 import GmailMessage = GoogleAppsScript.Gmail.GmailMessage
 import Sheet = GoogleAppsScript.Spreadsheet.Sheet
 
-const receipt_num_col = 3
-const tracking_num_col = 5
+const MSG_ID_HEADER = 'messageId'
+const DATE_HEADER = 'date'
+const RECEIPT_NUM_HEADER = 'receiptNum'
+const TOTAL_HEADER = 'total'
+const TRACKING_NUM_HEADER = 'trackingNum'
 
 /**
  * Receipt data gathered from email
@@ -87,7 +90,7 @@ function writeReceiptsToSheet() {
   const receipts = getReceiptInfoFromGmail()
   var sheet = SpreadsheetApp.getActiveSheet()
   sheet.clear()
-  sheet.appendRow(['messageId', 'date', 'receiptNum', 'total', 'trackingNum'])
+  sheet.appendRow([MSG_ID_HEADER, DATE_HEADER, RECEIPT_NUM_HEADER, TOTAL_HEADER, TRACKING_NUM_HEADER])
   receipts.forEach(receipt => {
     sheet.appendRow([receipt.messageId, receipt.date, receipt.receiptNum, receipt.total])
   })
@@ -115,10 +118,18 @@ function testSubmitFromSheet() {
   submitFromSheet(sheet, receipts[1])
 }
 
+function submitAllFromSheet() {
+  var sheet = SpreadsheetApp.getActiveSheet()
+  const receipts = getReceiptInfoFromSheet(sheet)
+  receipts.forEach(receipt => {
+    submitFromSheet(sheet, receipt)
+  })
+}
+
 function getReceiptInfoFromSheet(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
   var sheet = SpreadsheetApp.getActiveSheet()
   var data = sheet.getDataRange().getDisplayValues()
-  var headers = data[0]
+  var headers = getHeaders(data)
   var receipts: ReceiptInfo[] = []
   // skip first row (headers)
   // For each row, create a receipt object
@@ -145,18 +156,21 @@ function getRowByColValue(data: SheetData, value: string, col: ColumnNumber): Ro
 }
 
 function getRowByTrackingNum(data: SheetData, trackingNum: string): RowNumber | null {
-  return getRowByColValue(data, trackingNum, tracking_num_col)
+  const trackingNumCol = getColByHeader(data, TRACKING_NUM_HEADER)
+  return getRowByColValue(data, trackingNum, trackingNumCol)
 }
 
 function getRowByReceiptNum(data: SheetData, receiptNum: string): RowNumber | null {
-  return getRowByColValue(data, receiptNum, receipt_num_col)
+  const receiptNumCol = getColByHeader(data, RECEIPT_NUM_HEADER)
+  return getRowByColValue(data, receiptNum, receiptNumCol)
 }
 
 function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
   var data = sheet.getDataRange().getDisplayValues()
+  var trackingNumCol = getColByHeader(data, TRACKING_NUM_HEADER)
   var row = getRowByReceiptNum(data, receiptNum)
   if (row) {
-    var cell = sheet.getRange(row, tracking_num_col)
+    var cell = sheet.getRange(row, trackingNumCol)
     cell.setValue(trackingNum)
   } else {
     Logger.log('Could not find receipt number ' + receiptNum)
@@ -166,4 +180,12 @@ function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
 function setRead() {
   var m = GmailApp.getMessageById('181e4eeb7760843f')
   m.markUnread()
+}
+
+function getHeaders(data: SheetData) {
+  return data[0]
+}
+
+function getColByHeader(data: SheetData, header: string): ColumnNumber {
+  return getHeaders(data).indexOf(header) + 1
 }
