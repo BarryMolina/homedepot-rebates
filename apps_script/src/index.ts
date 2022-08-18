@@ -12,6 +12,9 @@ const STATUS_HEADER = 'status'
 const NOT_APPLIED_LABEL = 'Home Depot/Receipts/Not Applied'
 const APPLIED_LABEL = 'Home Depot/Receipts/Rebate Applied'
 
+// Change this to the url asscoiated with your Google Cloud Function
+const FUNCTION_URL = 'https://homedepot-rebate-2e7shldrnq-uc.a.run.app'
+
 /**
  * Receipt data gathered from email
  */
@@ -38,34 +41,6 @@ type RowNumber = number
  */
 type SheetData = string[][]
 
-
-function getReceiptInfoFromGmail() {
-  //var receiptThreads = GmailApp.getUserLabelByName('Home Depot/Receipts').getThreads()
-  var receiptThreads = GmailApp.search('label:home-depot-receipts-not-applied is:read')
-  let receiptMessages: GmailMessage[] = []
-  receiptThreads.forEach((t) => {
-    receiptMessages = [...receiptMessages, ...t.getMessages()]
-  })
-  Logger.log(receiptMessages.length)
-  const numDateRe = /(\d{4}\s{2}\d{5}\s{2}\d{5})\s+(\d{2}\/\d{2}\/\d{2})/
-  const totalRe = /\s*TOTAL\s+\$(\d+.\d{2})/
-  const receiptsInfo: ReceiptInfo[] = receiptMessages.reduce<ReceiptInfo[]>((receiptsInfo, message) => {
-    const body = message.getPlainBody()
-    const numDateMatch = body.match(numDateRe)
-    const totalMatch = body.match(totalRe)
-    if (totalMatch && numDateMatch) {
-      let receiptInfo: ReceiptInfo = {
-        messageId: message.getId(),
-        receiptNum: numDateMatch[1].replace(/ /g, ''),
-        date: numDateMatch[2],
-        total: totalMatch[1]
-      }
-      return [...receiptsInfo, receiptInfo]
-    }
-    return receiptsInfo
-  }, [])
-  return receiptsInfo
-}
 
 function parseReceiptMessage(message: GmailMessage) {
   const body = message.getPlainBody()
@@ -176,11 +151,10 @@ function logThreads() {
 }
 
 
-
 function submitReceipt(receiptData: ReceiptInfo): string | null {
   Logger.log('Submitting receipt from Apps Script: ')
   Logger.log(receiptData)
-  const functionUrl = 'https://homedepot-rebate-2e7shldrnq-uc.a.run.app'
+  const functionUrl = FUNCTION_URL
   const token = ScriptApp.getIdentityToken()
   var options = {
     'method': 'post',
@@ -203,62 +177,13 @@ function submitReceipt(receiptData: ReceiptInfo): string | null {
   return null
 }
 
-function writeReceiptsToSheet() {
-  const receipts = getReceiptInfoFromGmail()
-  var sheet = SpreadsheetApp.getActiveSheet()
-  sheet.clear()
-  sheet.appendRow([MSG_ID_HEADER, DATE_HEADER, RECEIPT_NUM_HEADER, TOTAL_HEADER, TRACKING_NUM_HEADER, STATUS_HEADER])
-  receipts.forEach(receipt => {
-    sheet.appendRow([receipt.messageId, receipt.date, receipt.receiptNum, receipt.total])
-  })
+function submitReceipts() {
+  submitReceiptsFromSearch('label:' + NOT_APPLIED_LABEL)
 }
 
-function submitManyFromSheet() {
-
-}
-
-function submitFromSheet(sheet: Sheet, receiptInfo: ReceiptInfo) {
-  const trackingNum = submitReceipt(receiptInfo)
-  if (trackingNum && receiptInfo.receiptNum) {
-    Logger.log(trackingNum)
-    setTrackingNum(sheet, receiptInfo.receiptNum, trackingNum)
-  } else {
-    Logger.log('Error submitting receipt: ')
-    Logger.log(receiptInfo)
-  }
-}
-
-function testSubmitFromSheet() {
-  var sheet = SpreadsheetApp.getActiveSheet()
-  const receipts = getReceiptInfoFromSheet(sheet)
-  //Logger.log(receipts)
-  submitFromSheet(sheet, receipts[1])
-}
-
-function submitAllFromSheet() {
-  var sheet = SpreadsheetApp.getActiveSheet()
-  const receipts = getReceiptInfoFromSheet(sheet)
-  receipts.forEach(receipt => {
-    submitFromSheet(sheet, receipt)
-  })
-}
-
-function getReceiptInfoFromSheet(sheet: GoogleAppsScript.Spreadsheet.Sheet) {
-  var sheet = SpreadsheetApp.getActiveSheet()
-  var data = sheet.getDataRange().getDisplayValues()
-  var headers = getHeaders(data)
-  var receipts: ReceiptInfo[] = []
-  // skip first row (headers)
-  // For each row, create a receipt object
-  for (var i = 1; i < data.length; i++) {
-    var receipt = data[i].reduce<ReceiptInfo>((cols, col, x) => {
-      return { ...cols, [headers[x]]: col }
-    }, {})
-    receipts.push(receipt)
-  }
-  return receipts
-}
-
+/**
+ * Utility functions
+ */
 
 // Get the row containing the specified value in a given column (starting at 1)
 function getRowByColValue(data: SheetData, value: string, col: ColumnNumber): RowNumber | null {
@@ -294,15 +219,16 @@ function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
   }
 }
 
-function setRead() {
-  var m = GmailApp.getMessageById('181e4eeb7760843f')
-  m.markUnread()
-}
-
 function getHeaders(data: SheetData) {
   return data[0]
 }
 
 function getColByHeader(data: SheetData, header: string): ColumnNumber {
   return getHeaders(data).indexOf(header) + 1
+}
+
+function testGetActiveSheet() {
+  var sheet = SpreadsheetApp.getActiveSheet()
+  var data = sheet.getDataRange().getDisplayValues()
+  Logger.log(data)
 }
