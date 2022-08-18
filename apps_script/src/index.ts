@@ -1,3 +1,4 @@
+import GmailThread = GoogleAppsScript.Gmail.GmailThread
 import GmailMessage = GoogleAppsScript.Gmail.GmailMessage
 import Sheet = GoogleAppsScript.Spreadsheet.Sheet
 
@@ -6,6 +7,10 @@ const DATE_HEADER = 'date'
 const RECEIPT_NUM_HEADER = 'receiptNum'
 const TOTAL_HEADER = 'total'
 const TRACKING_NUM_HEADER = 'trackingNum'
+const STATUS_HEADER = 'status'
+
+const NOT_APPLIED_LABEL = 'Home Depot/Receipts/Not Applied'
+const APPLIED_LABEL = 'Home Depot/Receipts/Rebate Applied'
 
 /**
  * Receipt data gathered from email
@@ -62,7 +67,119 @@ function getReceiptInfoFromGmail() {
   return receiptsInfo
 }
 
+function parseReceiptMessage(message: GmailMessage) {
+  const body = message.getPlainBody()
+  const numDateRe = /(\d{4}\s{2}\d{5}\s{2}\d{5})\s+(\d{2}\/\d{2}\/\d{2})/
+  const totalRe = /\s*TOTAL\s+\$(\d+.\d{2})/
+  const numDateMatch = body.match(numDateRe)
+  const totalMatch = body.match(totalRe)
+  if (totalMatch && numDateMatch) {
+    let receiptInfo: ReceiptInfo = {
+      messageId: message.getId(),
+      receiptNum: numDateMatch[1].replace(/ /g, ''),
+      date: numDateMatch[2],
+      total: totalMatch[1]
+    }
+    return receiptInfo
+  }
+  return null
+}
+
+function submitReceiptFromMessage(message: GmailMessage) {
+  const receiptInfo = parseReceiptMessage(message)
+  if (receiptInfo?.date && receiptInfo?.receiptNum && receiptInfo?.total) {
+    // Append receipt info to Google Sheet
+    var sheet = SpreadsheetApp.getActiveSheet()
+    // Check if receipt already exists in sheet
+    const receiptRow = getRowByReceiptNum(sheet.getDataRange().getDisplayValues(), receiptInfo.receiptNum)
+    if (!receiptRow) {
+      sheet.appendRow([message.getId(), receiptInfo.date, receiptInfo.receiptNum, receiptInfo.total])
+    }
+    const trackingNum = submitReceipt(receiptInfo)
+    if (trackingNum) {
+      Logger.log(trackingNum)
+      setTrackingNum(sheet, receiptInfo.receiptNum, trackingNum)
+      // Star message to indicate it has been processed
+      message.star()
+      return trackingNum
+    } else {
+      Logger.log('Error submitting receipt: ')
+      Logger.log(receiptInfo)
+    }
+  } else {
+    Logger.log('Error parsing receipt: ')
+    Logger.log(receiptInfo)
+  }
+  return null
+}
+
+function submitReceiptsFromThread(thread: GmailThread) {
+  let allProcessed = true
+
+  const messages = thread.getMessages()
+  messages.forEach((message) => {
+    // Check if message has already been processed
+    if (!message.isStarred()) {
+      const tracking = submitReceiptFromMessage(message)
+      // If any message fails to submit, mark thread as not processed
+      if (!tracking) {
+        allProcessed = false
+      }
+    } else {
+      Logger.log('Skipping starred message: ' + message.getId())
+    }
+  })
+  // Check if all messages in thread have been processed
+  if (allProcessed) {
+    Logger.log('All messages in thread have been processed: ' + thread.getId())
+    thread.removeLabel(GmailApp.getUserLabelByName(NOT_APPLIED_LABEL))
+    // Add label to indicate that rebate has been applied
+    thread.addLabel(GmailApp.getUserLabelByName(APPLIED_LABEL))
+  } else {
+    Logger.log('Not all messages in thread have been processed: ' + thread.getId())
+    messages.forEach((message) => {
+      if (!message.isStarred()) {
+        Logger.log('Unprocessed message: ' + message.getId())
+      }
+    }
+    )
+  }
+}
+
+// Submit receipts in messages that match the search query
+function submitReceiptsFromSearch(query: string) {
+  const threads = GmailApp.search(query)
+  threads.forEach((thread) => {
+    submitReceiptsFromThread(thread)
+  })
+}
+
+function submitOneReceipt() {
+  var m = GmailApp.getMessageById('')
+  submitReceiptFromMessage(m)
+}
+
+function submitReceiptsFromOneThread() {
+  var t = GmailApp.getThreadById('')
+  submitReceiptsFromThread(t)
+}
+
+// Log out threads and messages in the label
+function logThreads() {
+  var receiptThreads = GmailApp.getUserLabelByName(NOT_APPLIED_LABEL).getThreads()
+  receiptThreads.forEach((t) => {
+    Logger.log('thread: ' + t.getId())
+    t.getMessages().forEach((m) => {
+      Logger.log('message:' + m.getId())
+    })
+  })
+}
+
+
+
 function submitReceipt(receiptData: ReceiptInfo): string | null {
+  Logger.log('Submitting receipt from Apps Script: ')
+  Logger.log(receiptData)
   const functionUrl = 'https://homedepot-rebate-2e7shldrnq-uc.a.run.app'
   const token = ScriptApp.getIdentityToken()
   var options = {
@@ -77,10 +194,10 @@ function submitReceipt(receiptData: ReceiptInfo): string | null {
     const result = JSON.parse(res.getContentText())
     if (!result.error) {
       const trackingNum = result.trackingNumber
-      Logger.log('Tracking number: ' + trackingNum)
+      Logger.log('Submitted receipt successfully: ' + trackingNum)
       return trackingNum
     } else {
-      Logger.log('Error: ' + result.error)
+      Logger.log('Error submitting receipt: ' + result.error)
     }
   }
   return null
@@ -90,7 +207,7 @@ function writeReceiptsToSheet() {
   const receipts = getReceiptInfoFromGmail()
   var sheet = SpreadsheetApp.getActiveSheet()
   sheet.clear()
-  sheet.appendRow([MSG_ID_HEADER, DATE_HEADER, RECEIPT_NUM_HEADER, TOTAL_HEADER, TRACKING_NUM_HEADER])
+  sheet.appendRow([MSG_ID_HEADER, DATE_HEADER, RECEIPT_NUM_HEADER, TOTAL_HEADER, TRACKING_NUM_HEADER, STATUS_HEADER])
   receipts.forEach(receipt => {
     sheet.appendRow([receipt.messageId, receipt.date, receipt.receiptNum, receipt.total])
   })
