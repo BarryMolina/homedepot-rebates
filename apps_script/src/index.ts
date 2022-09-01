@@ -45,7 +45,7 @@ type SheetData = string[][]
 function parseReceiptMessage(message: GmailMessage) {
   const body = message.getPlainBody()
   const numDateRe = /(\d{4}\s{2}\d{5}\s{2}\d{5})\s+(\d{2}\/\d{2}\/\d{2})/
-  const totalRe = /\s*TOTAL\s+\$(\d+.\d{2})/
+  const totalRe = /\s*TOTAL\s+\$((?:\d{1,3},)*\d+.\d{2})/
   const numDateMatch = body.match(numDateRe)
   const totalMatch = body.match(totalRe)
   if (totalMatch && numDateMatch) {
@@ -53,7 +53,7 @@ function parseReceiptMessage(message: GmailMessage) {
       messageId: message.getId(),
       receiptNum: numDateMatch[1].replace(/ /g, ''),
       date: numDateMatch[2],
-      total: totalMatch[1]
+      total: totalMatch[1].replace(/,/g, '')
     }
     return receiptInfo
   }
@@ -72,7 +72,6 @@ function submitReceiptFromMessage(message: GmailMessage) {
     }
     const trackingNum = submitReceipt(receiptInfo)
     if (trackingNum) {
-      Logger.log(trackingNum)
       setTrackingNum(sheet, receiptInfo.receiptNum, trackingNum)
       // Star message to indicate it has been processed
       message.star()
@@ -100,25 +99,27 @@ function submitReceiptsFromThread(thread: GmailThread) {
       if (!tracking) {
         allProcessed = false
       }
-    } else {
-      Logger.log('Skipping starred message: ' + message.getId())
     }
+    // else {
+    //   Logger.log('Skipping starred message: ' + message.getId())
+    // }
   })
   // Check if all messages in thread have been processed
   if (allProcessed) {
-    Logger.log('All messages in thread have been processed: ' + thread.getId())
+    // Logger.log('All messages in thread have been processed: ' + thread.getId())
     thread.removeLabel(GmailApp.getUserLabelByName(NOT_APPLIED_LABEL))
     // Add label to indicate that rebate has been applied
     thread.addLabel(GmailApp.getUserLabelByName(APPLIED_LABEL))
-  } else {
-    Logger.log('Not all messages in thread have been processed: ' + thread.getId())
-    messages.forEach((message) => {
-      if (!message.isStarred()) {
-        Logger.log('Unprocessed message: ' + message.getId())
-      }
-    }
-    )
   }
+  // else {
+  //   Logger.log('Not all messages in thread have been processed: ' + thread.getId())
+  //   messages.forEach((message) => {
+  //     if (!message.isStarred()) {
+  //       Logger.log('Unprocessed message: ' + message.getId())
+  //     }
+  //   }
+  //   )
+  // }
 }
 
 // Submit receipts in messages that match the search query
