@@ -7,8 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start:submitReceipt": "functions-framework --target=submit-receipt",
     "start:rebateTracker": "functions-framework --target=rebate-tracker",
-    "start": "functions-framework --target=main",
-    "deploy": "gcloud functions deploy homedepot-rebate --gen2 --region=us-central1 --runtime=nodejs16 --source=./ --entry-point=main --trigger-http --memory=512MB"
+    "start:main": "functions-framework --target=main",
+    "deploy:submitReceipt": "gcloud functions deploy homedepot-rebate-submitReceipt --gen2 --region=us-central1 --runtime=nodejs16 --source=./ --entry-point=submit-receipt --trigger-http --memory=512MB",
+    "deploy:rebateTracker": "gcloud functions deploy homedepot-rebate-rebateTracker --gen2 --region=us-central1 --runtime=nodejs16 --source=./ --entry-point=rebate-tracker --trigger-http --memory=512MB",
+    "deploy": "npm run deploy:submitReceipt && npm run deploy:rebateTracker"
   },
   "keywords": [],
   "author": "",

@@ -10,7 +10,10 @@ const DATE_HEADER = "date";
 const RECEIPT_NUM_HEADER = "receiptNum";
 const TOTAL_HEADER = "total";
 const TRACKING_NUM_HEADER = "trackingNum";
-const STATUS_HEADER = "status";
+const STATUS_HEADER = "rebateStatus";
+const SUBMIT_DATE_HEADER = "submitDate";
+const PROCESSED_DATE_HEADER = "processedDate";
+const REBATE_AMOUNT_HEADER = "rebateAmount";
 
 /**
  * Statuses
@@ -29,9 +32,10 @@ const NOT_APPLIED_LABEL = "Home Depot/Receipts/Not Applied";
 const APPLIED_LABEL = "Home Depot/Receipts/Rebate Applied";
 
 // Change this to the url asscoiated with your Google Cloud Function
-const FUNCTION_URL = "https://homedepot-rebate-2e7shldrnq-uc.a.run.app";
-const SUBMIT_RECEIPT_PATH = "/submit-receipt";
-const RECEIPT_STATUS_PATH = "/receipt-status";
+const SUBMIT_RECEIPT_FUNCTION =
+  "https://homedepot-rebate-submitreceipt-2e7shldrnq-uc.a.run.app";
+const REBATE_TRACKER_FUNCTION =
+  "https://homedepot-rebate-rebatetracker-2e7shldrnq-uc.a.run.app";
 
 /**
  * Receipt data gathered from email
@@ -43,6 +47,13 @@ interface ReceiptInfo {
   total?: string;
   trackingNum?: string;
   status?: string;
+}
+
+interface TrackedFields {
+  rebateStatus?: string;
+  submitDate?: string;
+  processedDate?: string;
+  rebateAmount?: string;
 }
 
 /**
@@ -154,7 +165,7 @@ function submitReceiptsFromOneThread() {
 }
 
 function submitReceipt(receiptData: ReceiptInfo): string {
-  const res = cloudFunctionRequest(SUBMIT_RECEIPT_PATH, "POST", receiptData);
+  const res = performRequest(SUBMIT_RECEIPT_FUNCTION, "POST", receiptData);
   if (!res.trackingNumber) {
     throw new Error("No tracking number returned.");
   }
@@ -165,31 +176,26 @@ function submitReceipts() {
   submitReceiptsFromSearch("label:" + NOT_APPLIED_LABEL);
 }
 
-function updateReceiptStatus(sheet: Sheet, trackingNumber: string) {
+function updateTrackedFields(sheet: Sheet, trackingNumber: string) {
   try {
-    const res = cloudFunctionRequest(RECEIPT_STATUS_PATH, "GET", {
+    const res = performRequest(REBATE_TRACKER_FUNCTION, "GET", {
       trackingNumber,
     });
-    if (res.status) {
-      setRebateStatus(sheet, trackingNumber, res.status);
+    const { trackingNumber: _trackingNumber, ...trackedFields } = res;
+    if (res) {
+      setTrackedFields(sheet, trackingNumber, trackedFields);
     }
   } catch (e: any) {
     Logger.log(e);
   }
 }
 
-function testUpdateReceiptStatus() {
-  const tracking = "1013829507";
-  const sheet = SpreadsheetApp.getActiveSheet();
-  updateReceiptStatus(sheet, tracking);
-}
-
-function updateReceiptStatuses() {
+function updateTrackedFieldsAll() {
   var sheet = SpreadsheetApp.getActiveSheet();
   var data = sheet.getDataRange().getDisplayValues();
   loopSheetReceipts(data, ({ trackingNum }) => {
     if (trackingNum) {
-      updateReceiptStatus(sheet, trackingNum);
+      updateTrackedFields(sheet, trackingNum);
     }
   });
 }
@@ -208,8 +214,30 @@ function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
   );
 }
 
-function setRebateStatus(sheet: Sheet, receiptNum: string, status: string) {
-  setCellValue(sheet, RECEIPT_NUM_HEADER, receiptNum, STATUS_HEADER, status);
+function setTrackedFields(
+  sheet: Sheet,
+  trackingNum: string,
+  trackedFields: TrackedFields
+) {
+  //loop through tracked fields and set values
+  Object.keys(trackedFields).forEach((header) => {
+    const value = trackedFields[header as keyof TrackedFields];
+    setCellValue(sheet, TRACKING_NUM_HEADER, trackingNum, header, value);
+  });
+}
+
+function setRebateStatus(
+  sheet: Sheet,
+  receiptNum: string,
+  rebateStatus: string
+) {
+  setCellValue(
+    sheet,
+    RECEIPT_NUM_HEADER,
+    receiptNum,
+    STATUS_HEADER,
+    rebateStatus
+  );
 }
 
 // Get the row containing the specified value in a given column (starting at 1)
@@ -238,12 +266,15 @@ function setCellValue(
   searchHeader: string,
   searchValue: string,
   setHeader: string,
-  setValue: string
+  setValue: string | null | undefined
 ) {
+  if (!setValue) {
+    return;
+  }
   var data = sheet.getDataRange().getDisplayValues();
   var row = getRow(data, searchHeader, searchValue);
   var col = getColByHeader(data, setHeader);
-  if (row) {
+  if (row && col > 0) {
     var cell = sheet.getRange(row, col);
     cell.setValue(setValue);
   } else {
@@ -259,14 +290,14 @@ function getColByHeader(data: SheetData, header: string): ColumnNumber {
   return getHeaders(data).indexOf(header) + 1;
 }
 
-function cloudFunctionRequest(path: string, method = "GET", payload: any = {}) {
+function performRequest(url: string, method = "GET", payload: any = {}) {
   const token = ScriptApp.getIdentityToken();
   var options = {
     method: method,
     headers: { Authorization: "Bearer " + token },
     payload: method === "POST" ? payload : undefined,
   };
-  let url = FUNCTION_URL + path;
+  Logger.log(url);
   if (method === "GET" && Object.keys(payload).length > 0) {
     url +=
       "?" +

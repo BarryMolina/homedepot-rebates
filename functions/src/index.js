@@ -44,7 +44,7 @@ functions.http("submit-receipt", async (req, res) => {
 });
 
 functions.http("rebate-tracker", async (req, res) => {
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch();
   const { trackingNumber } = req.query;
   try {
     const status = await rebateTracker(browser, trackingNumber);
