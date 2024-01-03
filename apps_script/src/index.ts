@@ -19,6 +19,7 @@ const SUBMITTED_STATUS = "SUBMITTED";
 const ERROR_STATUS = "ERROR";
 const PENDING_STATUS = "PENDING";
 const APPROVED_STATUS = "APPROVED";
+const INVALID_DATE_STATUS = "INVALID DATE";
 
 /**
  * Labels -- Add these labels to your Gmail account
@@ -89,16 +90,16 @@ function submitReceiptFromMessage(message: GmailMessage) {
         receiptInfo.total,
       ]);
     }
-    const trackingNum = submitReceipt(receiptInfo);
-    if (trackingNum) {
+    try {
+      const trackingNum = submitReceipt(receiptInfo);
       setTrackingNum(sheet, receiptInfo.receiptNum, trackingNum);
-      updateRebateStatus(sheet, trackingNum, SUBMITTED_STATUS);
-      // Star message to indicate it has been processed
+      updateRebateStatus(sheet, receiptInfo.receiptNum, SUBMITTED_STATUS);
+      // Star message to indicate it has been successfully submitted
       message.star();
       return trackingNum;
-    } else {
-      Logger.log("Error submitting receipt: ");
-      Logger.log(receiptInfo);
+    } catch (e: any) {
+      Logger.log(e);
+      updateRebateStatus(sheet, receiptInfo.receiptNum, `ERROR: ${e.message}`); // e.g. `ERROR: Invalid date
     }
   } else {
     Logger.log("Error parsing receipt: ");
@@ -139,7 +140,7 @@ function submitReceiptsFromSearch(query: string) {
 }
 
 function submitOneReceipt() {
-  var m = GmailApp.getMessageById("");
+  var m = GmailApp.getMessageById("18a0482706ba5ab2");
   submitReceiptFromMessage(m);
 }
 
@@ -160,7 +161,7 @@ function logThreads() {
   });
 }
 
-function submitReceipt(receiptData: ReceiptInfo): string | null {
+function submitReceipt(receiptData: ReceiptInfo): string {
   Logger.log("Submitting receipt from Apps Script: ");
   Logger.log(receiptData);
   const functionUrl = FUNCTION_URL;
@@ -175,15 +176,18 @@ function submitReceipt(receiptData: ReceiptInfo): string | null {
   Logger.log(res);
   if (res.getResponseCode() == 200) {
     const result = JSON.parse(res.getContentText());
-    if (!result.error) {
-      const trackingNum = result.trackingNumber;
-      Logger.log("Submitted receipt successfully: " + trackingNum);
-      return trackingNum;
+    if (result.trackingNumber) {
+      return result.trackingNumber;
+    } else if (result.error) {
+      throw new Error(
+        result.error.cause ? result.error.cause : result.error.message
+      );
     } else {
-      Logger.log("Error submitting receipt: " + result.error);
+      throw new Error("No tracking number returned.");
     }
+  } else {
+    throw new Error(res.getResponseCode() + " " + res);
   }
-  return null;
 }
 
 function start() {
@@ -204,8 +208,8 @@ function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
   );
 }
 
-function updateRebateStatus(sheet: Sheet, trackingNum: string, status: string) {
-  setCellValue(sheet, TRACKING_NUM_HEADER, trackingNum, STATUS_HEADER, status);
+function updateRebateStatus(sheet: Sheet, receiptNum: string, status: string) {
+  setCellValue(sheet, RECEIPT_NUM_HEADER, receiptNum, STATUS_HEADER, status);
 }
 
 // Get the row containing the specified value in a given column (starting at 1)

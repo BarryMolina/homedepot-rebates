@@ -81,13 +81,19 @@ const rebateApply = async (
       await trackingSelector.getProperty("textContent")
     ).jsonValue();
     console.log(`Tracking number: ${trackingNumber}`);
-    await browser.close();
 
     return trackingNumber;
   } catch (error) {
     const errorPage = page.url();
-    error.message = `${error.message} - ${applyState} - ${errorPage}`;
-    throw error;
+    throw new Error(
+      `Error in rebateApply. ${applyState} at ${errorPage}: ${error.message}`,
+      {
+        cause: error,
+        details: "foo",
+      }
+    );
+  } finally {
+    await browser.close();
   }
 };
 

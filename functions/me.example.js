@@ -7,7 +7,7 @@ const me = {
   zip: "ZIP CODE",
   city: "CITY",
   country: "US",
-  state: "STATE",
+  state: "WI",
 };
 
 exports.me = me;
