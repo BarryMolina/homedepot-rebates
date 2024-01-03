@@ -2,11 +2,15 @@ const puppeteer = require("puppeteer");
 const functions = require("@google-cloud/functions-framework");
 
 const { rebateApply } = require("./rebateApply.js");
+const { rebateTracker } = require("./rebateTracker.js");
 const { me } = require("../me.js");
 
 functions.http("main", async (req, res) => {
-  const browser = await puppeteer.launch();
+  res.send("hello world");
+});
 
+functions.http("submit-receipt", async (req, res) => {
+  const browser = await puppeteer.launch();
   const { date, receiptNum, total } = req.body;
 
   try {
@@ -33,12 +37,31 @@ functions.http("main", async (req, res) => {
     res.send({ error: { message: "No tracking number returned." } });
   } catch (error) {
     console.log(error);
-    res.send({
-      error: {
-        message: error.message,
-        cause: error.cause ? error.cause.message : "",
-        details: error.details,
-      },
-    });
+    sendError(res, error);
+  } finally {
+    await browser.close();
   }
 });
+
+functions.http("rebate-tracker", async (req, res) => {
+  const browser = await puppeteer.launch({ headless: true });
+  const { trackingNumber } = req.query;
+  try {
+    const status = await rebateTracker(browser, trackingNumber);
+    res.send({ trackingNumber: trackingNumber, ...status });
+  } catch (error) {
+    sendError(res, error);
+  } finally {
+    await browser.close();
+  }
+});
+
+const sendError = (res, error) => {
+  res.send({
+    error: {
+      message: error.message,
+      cause: error.cause ? error.cause.message : "",
+      details: error.details,
+    },
+  });
+};

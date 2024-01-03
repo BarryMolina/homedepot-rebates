@@ -20,6 +20,7 @@ const ERROR_STATUS = "ERROR";
 const PENDING_STATUS = "PENDING";
 const APPROVED_STATUS = "APPROVED";
 const INVALID_DATE_STATUS = "INVALID DATE";
+const UNKNOWN_STATUS = "UNKNOWN";
 
 /**
  * Labels -- Add these labels to your Gmail account
@@ -29,6 +30,8 @@ const APPLIED_LABEL = "Home Depot/Receipts/Rebate Applied";
 
 // Change this to the url asscoiated with your Google Cloud Function
 const FUNCTION_URL = "https://homedepot-rebate-2e7shldrnq-uc.a.run.app";
+const SUBMIT_RECEIPT_PATH = "/submit-receipt";
+const RECEIPT_STATUS_PATH = "/receipt-status";
 
 /**
  * Receipt data gathered from email
@@ -39,6 +42,7 @@ interface ReceiptInfo {
   receiptNum?: string;
   total?: string;
   trackingNum?: string;
+  status?: string;
 }
 
 /**
@@ -93,13 +97,13 @@ function submitReceiptFromMessage(message: GmailMessage) {
     try {
       const trackingNum = submitReceipt(receiptInfo);
       setTrackingNum(sheet, receiptInfo.receiptNum, trackingNum);
-      updateRebateStatus(sheet, receiptInfo.receiptNum, SUBMITTED_STATUS);
+      setRebateStatus(sheet, receiptInfo.receiptNum, SUBMITTED_STATUS);
       // Star message to indicate it has been successfully submitted
       message.star();
       return trackingNum;
     } catch (e: any) {
       Logger.log(e);
-      updateRebateStatus(sheet, receiptInfo.receiptNum, `ERROR: ${e.message}`); // e.g. `ERROR: Invalid date
+      setRebateStatus(sheet, receiptInfo.receiptNum, `ERROR: ${e.message}`); // e.g. `ERROR: Invalid date
     }
   } else {
     Logger.log("Error parsing receipt: ");
@@ -149,49 +153,45 @@ function submitReceiptsFromOneThread() {
   submitReceiptsFromThread(t);
 }
 
-// Log out threads and messages in the label
-function logThreads() {
-  var receiptThreads =
-    GmailApp.getUserLabelByName(NOT_APPLIED_LABEL).getThreads();
-  receiptThreads.forEach((t) => {
-    Logger.log("thread: " + t.getId());
-    t.getMessages().forEach((m) => {
-      Logger.log("message:" + m.getId());
-    });
-  });
+function submitReceipt(receiptData: ReceiptInfo): string {
+  const res = cloudFunctionRequest(SUBMIT_RECEIPT_PATH, "POST", receiptData);
+  if (!res.trackingNumber) {
+    throw new Error("No tracking number returned.");
+  }
+  return res.trackingNumber;
 }
 
-function submitReceipt(receiptData: ReceiptInfo): string {
-  Logger.log("Submitting receipt from Apps Script: ");
-  Logger.log(receiptData);
-  const functionUrl = FUNCTION_URL;
-  const token = ScriptApp.getIdentityToken();
-  var options = {
-    method: "post",
-    headers: { Authorization: "Bearer " + token },
-    payload: receiptData,
-  };
+function submitReceipts() {
+  submitReceiptsFromSearch("label:" + NOT_APPLIED_LABEL);
+}
 
-  var res = UrlFetchApp.fetch(functionUrl, options);
-  Logger.log(res);
-  if (res.getResponseCode() == 200) {
-    const result = JSON.parse(res.getContentText());
-    if (result.trackingNumber) {
-      return result.trackingNumber;
-    } else if (result.error) {
-      throw new Error(
-        result.error.cause ? result.error.cause : result.error.message
-      );
-    } else {
-      throw new Error("No tracking number returned.");
+function updateReceiptStatus(sheet: Sheet, trackingNumber: string) {
+  try {
+    const res = cloudFunctionRequest(RECEIPT_STATUS_PATH, "GET", {
+      trackingNumber,
+    });
+    if (res.status) {
+      setRebateStatus(sheet, trackingNumber, res.status);
     }
-  } else {
-    throw new Error(res.getResponseCode() + " " + res);
+  } catch (e: any) {
+    Logger.log(e);
   }
 }
 
-function start() {
-  submitReceiptsFromSearch("label:" + NOT_APPLIED_LABEL);
+function testUpdateReceiptStatus() {
+  const tracking = "1013829507";
+  const sheet = SpreadsheetApp.getActiveSheet();
+  updateReceiptStatus(sheet, tracking);
+}
+
+function updateReceiptStatuses() {
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var data = sheet.getDataRange().getDisplayValues();
+  loopSheetReceipts(data, ({ trackingNum }) => {
+    if (trackingNum) {
+      updateReceiptStatus(sheet, trackingNum);
+    }
+  });
 }
 
 /**
@@ -208,7 +208,7 @@ function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
   );
 }
 
-function updateRebateStatus(sheet: Sheet, receiptNum: string, status: string) {
+function setRebateStatus(sheet: Sheet, receiptNum: string, status: string) {
   setCellValue(sheet, RECEIPT_NUM_HEADER, receiptNum, STATUS_HEADER, status);
 }
 
@@ -257,4 +257,56 @@ function getHeaders(data: SheetData) {
 
 function getColByHeader(data: SheetData, header: string): ColumnNumber {
   return getHeaders(data).indexOf(header) + 1;
+}
+
+function cloudFunctionRequest(path: string, method = "GET", payload: any = {}) {
+  const token = ScriptApp.getIdentityToken();
+  var options = {
+    method: method,
+    headers: { Authorization: "Bearer " + token },
+    payload: method === "POST" ? payload : undefined,
+  };
+  let url = FUNCTION_URL + path;
+  if (method === "GET" && Object.keys(payload).length > 0) {
+    url +=
+      "?" +
+      Object.keys(payload)
+        .map((k) => `${k}=${payload[k]}`)
+        .join("&");
+  }
+  var res = UrlFetchApp.fetch(url, options);
+  Logger.log(res);
+  if (res.getResponseCode() == 200) {
+    const data = JSON.parse(res.getContentText());
+    if (data.error) {
+      throw new Error(data.error.cause ? data.error.cause : data.error.message);
+    }
+    return data;
+  } else {
+    throw new Error(res.getResponseCode() + " " + res);
+  }
+}
+
+// function to loop through all rows in sheet
+function loopSheetReceipts(
+  data: SheetData,
+  callback: (receipt: ReceiptInfo) => void
+) {
+  const msgIdCol = getColByHeader(data, MSG_ID_HEADER);
+  const dateCol = getColByHeader(data, DATE_HEADER);
+  const receiptNumCol = getColByHeader(data, RECEIPT_NUM_HEADER);
+  const totalCol = getColByHeader(data, TOTAL_HEADER);
+  const trackingNumCol = getColByHeader(data, TRACKING_NUM_HEADER);
+  const statusCol = getColByHeader(data, STATUS_HEADER);
+
+  for (var i = 1; i < data.length; i++) {
+    callback({
+      messageId: data[i][msgIdCol - 1],
+      date: data[i][dateCol - 1],
+      receiptNum: data[i][receiptNumCol - 1],
+      total: data[i][totalCol - 1],
+      trackingNum: data[i][trackingNumCol - 1],
+      status: data[i][statusCol - 1],
+    });
+  }
 }

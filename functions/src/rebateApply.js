@@ -5,8 +5,7 @@ const rebateApply = async (
   me,
   receiptNum,
   receiptTotal,
-  purchaseDate,
-  physicalGiftCard = true
+  purchaseDate
 ) => {
   validateInput(me, receiptNum, receiptTotal, purchaseDate);
 
@@ -92,8 +91,6 @@ const rebateApply = async (
         details: "foo",
       }
     );
-  } finally {
-    await browser.close();
   }
 };
 
