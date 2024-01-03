@@ -26,7 +26,7 @@ A node.js project that uses browser automation to fill out the rebate applicatio
 4. Copy `me.example.js` to `me.js` and fill in the required information
 5. Deploy the Cloud Function using `gcloud init && cd functions && npm run deploy`
 6. Update the function url with the one associated with your cloud function
-7. Set up a trigger to call the `run()` function as often as you'd like
+7. Set up a trigger to call the `start()` function as often as you'd like
 8. Enjoy automatic, pain-free rebate receipt applications!
 
 ## TODO

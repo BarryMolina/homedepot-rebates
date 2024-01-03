@@ -185,7 +185,7 @@ function submitReceipt(receiptData: ReceiptInfo): string | null {
   return null;
 }
 
-function run() {
+function start() {
   submitReceiptsFromSearch("label:" + NOT_APPLIED_LABEL);
 }
 
