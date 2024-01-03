@@ -189,7 +189,7 @@ function submitReceipts() {
 // Get the row containing the specified value in a given column (starting at 1)
 function getRowByColValue(data: SheetData, value: string, col: ColumnNumber): RowNumber | null {
   for (var i = 1; i < data.length; i++) {
-    Logger.log('testing ' + data[i][col - 1] + ' == ' + value)
+    // Logger.log('testing ' + data[i][col - 1] + ' == ' + value)
     if (data[i][col - 1] == value) {
       return i + 1
     }
