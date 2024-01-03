@@ -12,6 +12,14 @@ A node.js project that uses browser automation to fill out the rebate applicatio
 
 ## Installation
 
+### Email Setup
+
+1. In your Gmail inbox, create a new label called "Home Depot/Receipts/Not Applied"
+2. Create another label called "Home Depot/Receipts/Rebate Applied"
+3. Create a filter to automatically apply the "Home Depot/Receipts/Not Applied" label to all emails from "HomeDepot@order.homedepot.com" with the subject "Your Electronic Receipt".
+
+### Project Setup
+
 1. Create a new Google Sheet and associated Apps Script Project
 2. Create a new GCP project and connect it to the GAS script
 3. Clone this repository and upload the Apps script code using `clasp login && cd apps_script && npm run deploy`
