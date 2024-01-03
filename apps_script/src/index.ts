@@ -2,6 +2,9 @@ import GmailThread = GoogleAppsScript.Gmail.GmailThread;
 import GmailMessage = GoogleAppsScript.Gmail.GmailMessage;
 import Sheet = GoogleAppsScript.Spreadsheet.Sheet;
 
+/**
+ * Headers
+ */
 const MSG_ID_HEADER = "messageId";
 const DATE_HEADER = "date";
 const RECEIPT_NUM_HEADER = "receiptNum";
@@ -9,6 +12,17 @@ const TOTAL_HEADER = "total";
 const TRACKING_NUM_HEADER = "trackingNum";
 const STATUS_HEADER = "status";
 
+/**
+ * Statuses
+ */
+const SUBMITTED_STATUS = "SUBMITTED";
+const ERROR_STATUS = "ERROR";
+const PENDING_STATUS = "PENDING";
+const APPROVED_STATUS = "APPROVED";
+
+/**
+ * Labels -- Add these labels to your Gmail account
+ */
 const NOT_APPLIED_LABEL = "Home Depot/Receipts/Not Applied";
 const APPLIED_LABEL = "Home Depot/Receipts/Rebate Applied";
 
@@ -64,11 +78,9 @@ function submitReceiptFromMessage(message: GmailMessage) {
   if (receiptInfo?.date && receiptInfo?.receiptNum && receiptInfo?.total) {
     // Append receipt info to Google Sheet
     var sheet = SpreadsheetApp.getActiveSheet();
+    var data = sheet.getDataRange().getDisplayValues();
     // Check if receipt already exists in sheet
-    const receiptRow = getRowByReceiptNum(
-      sheet.getDataRange().getDisplayValues(),
-      receiptInfo.receiptNum
-    );
+    const receiptRow = getRow(data, RECEIPT_NUM_HEADER, receiptInfo.receiptNum);
     if (!receiptRow) {
       sheet.appendRow([
         message.getId(),
@@ -80,6 +92,7 @@ function submitReceiptFromMessage(message: GmailMessage) {
     const trackingNum = submitReceipt(receiptInfo);
     if (trackingNum) {
       setTrackingNum(sheet, receiptInfo.receiptNum, trackingNum);
+      updateRebateStatus(sheet, trackingNum, SUBMITTED_STATUS);
       // Star message to indicate it has been processed
       message.star();
       return trackingNum;
@@ -107,9 +120,6 @@ function submitReceiptsFromThread(thread: GmailThread) {
         allProcessed = false;
       }
     }
-    // else {
-    //   Logger.log('Skipping starred message: ' + message.getId())
-    // }
   });
   // Check if all messages in thread have been processed
   if (allProcessed) {
@@ -118,15 +128,6 @@ function submitReceiptsFromThread(thread: GmailThread) {
     // Add label to indicate that rebate has been applied
     thread.addLabel(GmailApp.getUserLabelByName(APPLIED_LABEL));
   }
-  // else {
-  //   Logger.log('Not all messages in thread have been processed: ' + thread.getId())
-  //   messages.forEach((message) => {
-  //     if (!message.isStarred()) {
-  //       Logger.log('Unprocessed message: ' + message.getId())
-  //     }
-  //   }
-  //   )
-  // }
 }
 
 // Submit receipts in messages that match the search query
@@ -193,6 +194,20 @@ function start() {
  * Utility functions
  */
 
+function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
+  setCellValue(
+    sheet,
+    RECEIPT_NUM_HEADER,
+    receiptNum,
+    TRACKING_NUM_HEADER,
+    trackingNum
+  );
+}
+
+function updateRebateStatus(sheet: Sheet, trackingNum: string, status: string) {
+  setCellValue(sheet, TRACKING_NUM_HEADER, trackingNum, STATUS_HEADER, status);
+}
+
 // Get the row containing the specified value in a given column (starting at 1)
 function getRowByColValue(
   data: SheetData,
@@ -209,31 +224,26 @@ function getRowByColValue(
   return null;
 }
 
-function getRowByTrackingNum(
-  data: SheetData,
-  trackingNum: string
-): RowNumber | null {
-  const trackingNumCol = getColByHeader(data, TRACKING_NUM_HEADER);
-  return getRowByColValue(data, trackingNum, trackingNumCol);
+function getRow(data: SheetData, header: string, value: string) {
+  var col = getColByHeader(data, header);
+  return getRowByColValue(data, value, col);
 }
 
-function getRowByReceiptNum(
-  data: SheetData,
-  receiptNum: string
-): RowNumber | null {
-  const receiptNumCol = getColByHeader(data, RECEIPT_NUM_HEADER);
-  return getRowByColValue(data, receiptNum, receiptNumCol);
-}
-
-function setTrackingNum(sheet: Sheet, receiptNum: string, trackingNum: string) {
+function setCellValue(
+  sheet: Sheet,
+  searchHeader: string,
+  searchValue: string,
+  setHeader: string,
+  setValue: string
+) {
   var data = sheet.getDataRange().getDisplayValues();
-  var trackingNumCol = getColByHeader(data, TRACKING_NUM_HEADER);
-  var row = getRowByReceiptNum(data, receiptNum);
+  var row = getRow(data, searchHeader, searchValue);
+  var col = getColByHeader(data, setHeader);
   if (row) {
-    var cell = sheet.getRange(row, trackingNumCol);
-    cell.setValue(trackingNum);
+    var cell = sheet.getRange(row, col);
+    cell.setValue(setValue);
   } else {
-    Logger.log("Could not find receipt number " + receiptNum);
+    Logger.log("Could not find " + searchHeader + " " + searchValue);
   }
 }
 
@@ -243,10 +253,4 @@ function getHeaders(data: SheetData) {
 
 function getColByHeader(data: SheetData, header: string): ColumnNumber {
   return getHeaders(data).indexOf(header) + 1;
-}
-
-function testGetActiveSheet() {
-  var sheet = SpreadsheetApp.getActiveSheet();
-  var data = sheet.getDataRange().getDisplayValues();
-  Logger.log(data);
 }
