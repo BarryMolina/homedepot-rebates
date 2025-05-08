@@ -1,3 +1,6 @@
+UPDATE 05/07/2025:
+Home Depot unfortunately doesn't offer rebates anymore. This repo is archived.
+
 # homedepot-rebates
 
 Google Apps Script + Cloud Functions project to parse emailed receipts from Home Depot and submit a 11% rebate application.
